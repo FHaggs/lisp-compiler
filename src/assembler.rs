@@ -12,13 +12,11 @@ pub enum Register {
 }
 
 const REX_W_PREFIX: u8 = 0x48;
-/// Manages the assembly process and holds the generated code.
 pub struct Assembler {
     code: Vec<u8>,
 }
 
 impl Assembler {
-    /// Creates a new, empty assembler.
     pub fn new() -> Self {
         Assembler { code: Vec::new() }
     }
@@ -27,8 +25,6 @@ impl Assembler {
     pub fn finalize(&self) -> &Vec<u8> {
         &self.code
     }
-
-    // --- Instruction Methods ---
 
     /// Emits a 64-bit "move register, immediate" instruction.
     /// Example: `mov rax, 42`

@@ -50,8 +50,6 @@ pub fn decode_integer(value: Word) -> Word {
     value >> K_INTEGER_SHIFT
 }
 
-// --- Character Encoding Functions ---
-
 pub fn encode_char(value: char) -> Word {
     ((value as Word) << K_CHAR_SHIFT) | K_CHAR_TAG
 }
@@ -62,8 +60,6 @@ pub fn decode_char(value: Word) -> char {
     // In a real compiler, you might want safer handling.
     std::char::from_u32(decoded as u32).unwrap()
 }
-
-// --- Boolean Encoding Functions ---
 
 pub fn encode_bool(value: bool) -> Word {
     ((value as Word) << K_BOOL_SHIFT) | K_BOOL_TAG

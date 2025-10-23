@@ -2,7 +2,6 @@ use crate::assembler::{Assembler, Register};
 use crate::ast::AstNode;
 use crate::encodings;
 
-/// A simple error type for our compiler.
 #[derive(Debug)]
 pub enum CompilerError {
     UnexpectedNodeType,
