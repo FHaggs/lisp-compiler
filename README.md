@@ -1,9 +1,6 @@
-# Compiler for Lisp
+# JIT Runtime for Lisp
 
-This is a demo project, and still in development.
-
-This implementation generates machine code directly, instead of generating text assembly.
-I only choose this to learn more about compilers and machine code.
+This is a project to learn about compilers and machine code by building a high-performance JIT (Just-In-Time) runtime for a Lisp-like language.
 
 Plans:
 - [x] Compile integers

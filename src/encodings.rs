@@ -1,7 +1,6 @@
 pub type Word = i64;
+pub type UWord = u64;
 
-// --- Private Constants (Implementation Details) ---
-// (These are the same as before, but not all need to be pub)
 const K_CHAR_TAG: Word = 0x0f;
 const K_CHAR_MASK: Word = 0xff;
 const K_CHAR_SHIFT: u32 = 8;
@@ -17,6 +16,11 @@ const K_INTEGER_MIN: Word = -(1_i64 << (62 - 1));
 const K_INTEGER_SHIFT: u32 = 2;
 const K_INTEGER_MASK: Word = 0x03; // Mask to check the integer tag (0b11)
 const K_INTEGER_TAG: Word = 0x00; // Tag for integers (0b00)
+
+// Pairs
+const K_PAIR_TAG: u32 = 0x1;
+const K_HEAP_TAG_MASK: u32 = 0x7; // 0b111
+const K_HEAP_PTR_MASK: u32 = !K_HEAP_TAG_MASK;
 
 /// A type-safe wrapper for a 64-bit tagged Lisp value.
 /// It has the same size and performance as a raw i64.
