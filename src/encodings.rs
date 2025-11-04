@@ -1,70 +1,123 @@
 pub type Word = i64;
 
-// The mask for all immediate types (char, bool, nil)
-pub const K_IMMEDIATE_TAG_MASK: Word = 0x3f; // 0b00111111
-
-// --- Character Encoding ---
-pub const K_CHAR_TAG: Word = 0x0f; // 0b00001111
-const K_CHAR_MASK: Word = 0xff; // Mask to extract the char value
+// --- Private Constants (Implementation Details) ---
+// (These are the same as before, but not all need to be pub)
+const K_CHAR_TAG: Word = 0x0f;
+const K_CHAR_MASK: Word = 0xff;
 const K_CHAR_SHIFT: u32 = 8;
 
-// --- Boolean Encoding ---
-pub const K_BOOL_TAG: Word = 0x1f; // 0b00011111
-const K_BOOL_MASK: Word = 0x80; // Mask to extract the bool value (the 7th bit)
+const K_BOOL_TAG: Word = 0x1f;
+const K_BOOL_MASK: Word = 0x80;
 const K_BOOL_SHIFT: u32 = 7;
 
-// --- Canonical Object Values ---
+const K_NIL_VALUE: Word = 0x2f;
 
-/// The single, unique value representing 'nil'.
-pub fn object_nil() -> Word {
-    0x2f // 0b00101111
-}
-
-/// The single, unique value representing 'true'.
-pub fn object_true() -> Word {
-    encode_bool(true)
-}
-
-/// The single, unique value representing 'false'.
-pub fn object_false() -> Word {
-    encode_bool(false)
-}
-
-// --- Integer Encoding ---
-// We use 62 bits for encoding ints, 1 is the sign bit.
 const K_INTEGER_MAX: Word = (1_i64 << (62 - 1)) - 1;
 const K_INTEGER_MIN: Word = -(1_i64 << (62 - 1));
 const K_INTEGER_SHIFT: u32 = 2;
+const K_INTEGER_MASK: Word = 0x03; // Mask to check the integer tag (0b11)
+const K_INTEGER_TAG: Word = 0x00; // Tag for integers (0b00)
 
-pub fn encode_integer(value: Word) -> Word {
-    assert!(
-        value >= K_INTEGER_MIN && value <= K_INTEGER_MAX,
-        "Integer out of range"
-    );
-    value << K_INTEGER_SHIFT
-}
+/// A type-safe wrapper for a 64-bit tagged Lisp value.
+/// It has the same size and performance as a raw i64.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)] // Guarantees it's just a Word
+pub struct LispValue(Word);
 
-pub fn decode_integer(value: Word) -> Word {
-    // Note: The right shift on a signed integer (i64) is an
-    // arithmetic shift, which correctly preserves the sign.
-    value >> K_INTEGER_SHIFT
-}
+impl LispValue {
+    pub fn from_raw_word(word: Word) -> Self {
+        LispValue(word)
+    }
+    // --- 1. CONSTRUCTORS (Encoding) ---
 
-pub fn encode_char(value: char) -> Word {
-    ((value as Word) << K_CHAR_SHIFT) | K_CHAR_TAG
-}
+    /// Creates a new LispValue from a native integer.
+    pub fn from_integer(value: Word) -> Self {
+        assert!(
+            value >= K_INTEGER_MIN && value <= K_INTEGER_MAX,
+            "Integer out of range"
+        );
+        // The tag (0b00) is implicit in the shift.
+        LispValue(value << K_INTEGER_SHIFT)
+    }
 
-pub fn decode_char(value: Word) -> char {
-    let decoded = (value >> K_CHAR_SHIFT) & K_CHAR_MASK;
-    // This can panic if the value is not a valid char.
-    // In a real compiler, you might want safer handling.
-    std::char::from_u32(decoded as u32).unwrap()
-}
+    /// Creates a new LispValue from a native char.
+    pub fn from_char(value: char) -> Self {
+        LispValue(((value as Word) << K_CHAR_SHIFT) | K_CHAR_TAG)
+    }
 
-pub fn encode_bool(value: bool) -> Word {
-    ((value as Word) << K_BOOL_SHIFT) | K_BOOL_TAG
-}
+    /// Creates a new LispValue from a native bool.
+    pub fn from_bool(value: bool) -> Self {
+        LispValue(((value as Word) << K_BOOL_SHIFT) | K_BOOL_TAG)
+    }
 
-pub fn decode_bool(value: Word) -> bool {
-    (value & K_BOOL_MASK) != 0
+    /// Returns the canonical 'nil' LispValue.
+    pub fn nil() -> Self {
+        LispValue(K_NIL_VALUE)
+    }
+
+    /// Returns the canonical 'true' LispValue.
+    pub fn true_val() -> Self {
+        Self::from_bool(true)
+    }
+
+    /// Returns the canonical 'false' LispValue.
+    pub fn false_val() -> Self {
+        Self::from_bool(false)
+    }
+
+    // --- 2. TYPE CHECKERS (Tag Checking) ---
+
+    pub fn is_integer(&self) -> bool {
+        (self.0 & K_INTEGER_MASK) == K_INTEGER_TAG
+    }
+
+    pub fn is_char(&self) -> bool {
+        (self.0 & K_CHAR_TAG) == K_CHAR_TAG // Simplified check for this scheme
+    }
+
+    pub fn is_bool(&self) -> bool {
+        (self.0 & K_BOOL_TAG) == K_BOOL_TAG // Simplified check
+    }
+
+    pub fn is_nil(&self) -> bool {
+        self.0 == K_NIL_VALUE
+    }
+
+    // --- 3. ACCESSORS (Decoding) ---
+
+    /// If this value is an integer, returns the decoded i64.
+    pub fn as_integer(&self) -> Option<Word> {
+        if self.is_integer() {
+            Some(self.0 >> K_INTEGER_SHIFT)
+        } else {
+            None
+        }
+    }
+
+    /// If this value is a char, returns the decoded char.
+    pub fn as_char(&self) -> Option<char> {
+        if self.is_char() {
+            let decoded = (self.0 >> K_CHAR_SHIFT) & K_CHAR_MASK;
+            std::char::from_u32(decoded as u32) // Returns Option<char>
+        } else {
+            None
+        }
+    }
+
+    /// If this value is a bool, returns the decoded bool.
+    pub fn as_bool(&self) -> Option<bool> {
+        if self.is_bool() {
+            Some((self.0 & K_BOOL_MASK) != 0)
+        } else {
+            None
+        }
+    }
+
+    // --- 4. RAW ACCESS ---
+
+    /// Returns the raw encoded 64-bit Word.
+    /// Your compiler will use this to pass the value to the assembler.
+    pub fn as_raw_word(&self) -> Word {
+        self.0
+    }
 }
