@@ -1,7 +1,5 @@
-// [File: compiler.rs]
-
 use crate::assembler::{Assembler, Register};
-use crate::ast::AstNode; // UnaryOp is no longer imported
+use crate::ast::AstNode;
 use crate::encodings::{LispValue, Pair, Symbol};
 use std::collections::HashMap;
 
@@ -226,7 +224,7 @@ mod tests {
         };
 
         let result = compiler.compile_function(&ast_node);
-        assert!(result.is_ok()); // This should pass now
+        assert!(result.is_ok());
 
         let code = result.unwrap();
         let exec = ExecBuffer::new(&code).unwrap();
