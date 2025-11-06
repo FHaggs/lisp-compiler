@@ -177,7 +177,6 @@ mod tests {
         assert_eq!(lisp_val.as_bool(), Some(expr));
     }
 
-    // --- UPDATED: Test for add1 ---
     #[test]
     fn test_add1() {
         let mut compiler = Compiler::new();
@@ -204,5 +203,40 @@ mod tests {
         // The result should be the encoded value for 11
         assert!(lisp_val.is_integer());
         assert_eq!(lisp_val.as_integer(), Some(11));
+    }
+
+    #[test]
+    fn test_nested_adds() {
+        let mut compiler = Compiler::new();
+        let val = 10;
+        let expected = val + 2;
+        // Test (add1 (add1 5))
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("add1".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Pair {
+                    car: Box::new(AstNode::Symbol("add1".to_string())),
+                    cdr: Box::new(AstNode::Pair {
+                        car: Box::new(AstNode::Integer(val)),
+                        cdr: Box::new(AstNode::Nil),
+                    }),
+                }),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+
+        let result = compiler.compile_function(&ast_node);
+        assert!(result.is_ok()); // This should pass now
+
+        let code = result.unwrap();
+        let exec = ExecBuffer::new(&code).unwrap();
+
+        let func = unsafe { exec.as_function::<unsafe extern "C" fn() -> i64>() };
+        let encoded_result = unsafe { func() };
+        let lisp_val = LispValue::from_raw_word(encoded_result);
+
+        // The result should be the encoded value for 11
+        assert!(lisp_val.is_integer());
+        assert_eq!(lisp_val.as_integer(), Some(expected));
     }
 }
