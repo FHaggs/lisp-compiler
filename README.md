@@ -1,6 +1,6 @@
 # JIT Runtime for Lisp
 
-This is a project to learn about compilers and machine code by building a high-performance JIT (Just-In-Time) runtime for a Lisp-like language.
+This is a project to learn about compilers and machine code by building a high-performance JIT (Just-In-Time) runtime for a Lisp-like language. This is just for fun.
 
 Plans:
 - [x] Compile integers

@@ -36,6 +36,13 @@ impl Assembler {
 
         self // Return `&mut Self` to allow chaining
     }
+    pub fn add_reg_imm32(&mut self, dst: Register, src: i32) -> &mut Self {
+        self.code.push(REX_W_PREFIX);
+        self.code.push(0x81); // Opcode for immediate arithmetic
+        self.code.push(0xc0 + dst as u8); // ModR/M: /0 (add)
+        self.code.extend_from_slice(&(src as u32).to_le_bytes());
+        self
+    }
 
     /// Emits a `ret` instruction.
     pub fn ret(&mut self) -> &mut Self {

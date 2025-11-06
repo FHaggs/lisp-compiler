@@ -1,9 +1,12 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum AstNode {
     Integer(i64),
     Bool(bool),
     Char(char),
     Nil,
-    // Pair(*mut Pair),
-    // Symbol(u64),
+    Pair {
+        car: Box<AstNode>,
+        cdr: Box<AstNode>,
+    },
+    Symbol(String),
 }
