@@ -1,9 +1,9 @@
 pub type Word = i64;
 pub type UWord = u64;
 
-const K_CHAR_TAG: Word = 0x0f;
+pub const K_CHAR_TAG: Word = 0x0f;
 const K_CHAR_MASK: Word = 0xff;
-const K_CHAR_SHIFT: u32 = 8;
+pub const K_CHAR_SHIFT: u32 = 8;
 
 const K_BOOL_TAG: Word = 0x1f;
 const K_BOOL_MASK: Word = 0x80;
@@ -13,7 +13,7 @@ const K_NIL_VALUE: Word = 0x2f;
 
 const K_INTEGER_MAX: Word = (1_i64 << (62 - 1)) - 1;
 const K_INTEGER_MIN: Word = -(1_i64 << (62 - 1));
-const K_INTEGER_SHIFT: u32 = 2;
+pub const K_INTEGER_SHIFT: u32 = 2;
 const K_INTEGER_MASK: Word = 0x03;
 const K_INTEGER_TAG: Word = 0x00;
 

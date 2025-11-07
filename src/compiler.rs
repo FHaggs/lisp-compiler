@@ -1,6 +1,6 @@
 use crate::assembler::{Assembler, Register};
 use crate::ast::AstNode;
-use crate::encodings::{LispValue, Pair, Symbol};
+use crate::encodings::{K_CHAR_SHIFT, K_CHAR_TAG, K_INTEGER_SHIFT, LispValue, Pair, Symbol};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -95,6 +95,7 @@ impl Compiler {
                 // We must check that the 'car' is a symbol.
                 if let AstNode::Symbol(name) = &**car {
                     match name.as_str() {
+                        // TODO: This is temporary, we should use a more complex symbol table
                         "add1" => {
                             // This is a primitive unary function.
                             // We expect one argument in the `cdr` list.
@@ -108,7 +109,7 @@ impl Compiler {
                                     // 1. Compile the argument. Result is in RAX.
                                     self.compile_expr(arg1)?;
 
-                                    // 2. Emit the 'add1' operation
+                                    // 2. Emit the 'add1' operation. Adding 1 << 2 due to pointer tagging
                                     let encoded_one = LispValue::from_integer(1).as_raw_word();
                                     self.asm.add_reg_imm32(Register::Rax, encoded_one as i32);
                                 } else {
@@ -118,7 +119,22 @@ impl Compiler {
                                 }
                             } else {
                                 return Err(CompilerError::InvalidArguments(
-                                    "add1 expects 1 argument".to_string(),
+                                    "add1 expects 1 argument. Needs a pair".to_string(),
+                                ));
+                            }
+                        }
+                        "integer->char" => {
+                            if let AstNode::Pair { car: arg1, cdr: _ } = &**cdr {
+                                self.compile_expr(arg1)?;
+                                self.asm
+                                    .shl_reg_imm8(
+                                        Register::Rax,
+                                        (K_CHAR_SHIFT - K_INTEGER_SHIFT) as u8,
+                                    )
+                                    .or_reg_imm8(Register::Rax, K_CHAR_TAG as u8);
+                            } else {
+                                return Err(CompilerError::InvalidArguments(
+                                    "integer->char expects 1 argument. Needs a pair".to_string(),
                                 ));
                             }
                         }
@@ -144,6 +160,17 @@ mod tests {
     use crate::ExecBuffer;
     use crate::ast::AstNode; // Import AstNode
     use crate::encodings::LispValue; // Import LispValue
+    fn compile_ast(ast_node: AstNode) -> LispValue {
+        let mut compiler = Compiler::new();
+        let result = compiler.compile_function(&ast_node);
+        assert!(result.is_ok());
+        let code = result.unwrap();
+        let exec = ExecBuffer::new(&code).unwrap();
+
+        let func = unsafe { exec.as_function::<unsafe extern "C" fn() -> i64>() };
+        let encoded_result = unsafe { func() };
+        LispValue::from_raw_word(encoded_result)
+    }
     #[test]
     fn test_compiler() {
         let mut compiler = Compiler::new();
@@ -236,5 +263,19 @@ mod tests {
         // The result should be the encoded value for 11
         assert!(lisp_val.is_integer());
         assert_eq!(lisp_val.as_integer(), Some(expected));
+    }
+    #[test]
+    fn test_int2char() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("integer->char".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(64)),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        let char = lisp_val.as_char();
+        // 64 in the asscii table is @
+        assert_eq!(char, Some('@'));
     }
 }

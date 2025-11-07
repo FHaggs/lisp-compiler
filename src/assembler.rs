@@ -43,6 +43,21 @@ impl Assembler {
         self.code.extend_from_slice(&(src as u32).to_le_bytes());
         self
     }
+    pub fn shl_reg_imm8(&mut self, dst: Register, imm8: u8) -> &mut Self {
+        self.code.push(REX_W_PREFIX); // 0x48
+        self.code.push(0xC1); // Opcode for SHL r/m64, imm8
+        self.code.push(0xE0 + dst as u8); // ModR/M: mod=11, reg=100 (/4), r/m=dst
+        self.code.push(imm8); // Immediate value
+        self
+    }
+
+    pub fn or_reg_imm8(&mut self, dst: Register, imm8: u8) -> &mut Self {
+        self.code.push(REX_W_PREFIX); // 0x48 → use 64-bit operands
+        self.code.push(0x83); // Opcode for arithmetic with imm8 (sign-extended)
+        self.code.push(0xC8 + dst as u8); // ModR/M: mod=11, reg=001 (/1 = OR), r/m=dst
+        self.code.push(imm8); // Immediate 8-bit value
+        self
+    }
 
     /// Emits a `ret` instruction.
     pub fn ret(&mut self) -> &mut Self {
