@@ -1,6 +1,8 @@
-use crate::assembler::{Assembler, Register};
+use crate::assembler::{Assembler, PartialRegister, Register, SetccConditions};
 use crate::ast::AstNode;
-use crate::encodings::{K_CHAR_SHIFT, K_CHAR_TAG, K_INTEGER_SHIFT, LispValue, Pair, Symbol};
+use crate::encodings::{
+    K_BOOL_SHIFT, K_BOOL_TAG, K_CHAR_SHIFT, K_CHAR_TAG, K_INTEGER_SHIFT, LispValue, Pair, Symbol,
+};
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -60,6 +62,97 @@ impl Compiler {
         self.asm.ret();
         Ok(self.asm.finalize())
     }
+    fn compile_call(&mut self, car: &AstNode, cdr: &AstNode) -> Result<(), CompilerError> {
+        // A Pair in evaluation position means a function call.
+        // We must check that the 'car' is a symbol.
+        if let AstNode::Symbol(name) = car {
+            match name.as_str() {
+                // TODO: This is temporary, we should use a more complex symbol table
+                "add1" => {
+                    // This is a primitive unary function.
+                    // We expect one argument in the `cdr` list.
+                    if let AstNode::Pair {
+                        car: arg1,
+                        cdr: arg_rest,
+                    } = cdr
+                    {
+                        // Check it's (add1 arg1), not (add1 arg1 arg2 ...)
+                        if let AstNode::Nil = &**arg_rest {
+                            // 1. Compile the argument. Result is in RAX.
+                            self.compile_expr(arg1)?;
+
+                            // 2. Emit the 'add1' operation. Adding 1 << 2 due to pointer tagging
+                            let encoded_one = LispValue::from_integer(1).as_raw_word();
+                            self.asm.add_reg_imm32(Register::Rax, encoded_one as i32);
+                            Ok(())
+                        } else {
+                            return Err(CompilerError::InvalidArguments(
+                                "add1 expects 1 argument".to_string(),
+                            ));
+                        }
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "add1 expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+                "sub1" => {
+                    if let AstNode::Pair { car: arg, cdr: _ } = cdr {
+                        self.compile_expr(arg)?;
+
+                        let encoded_one = LispValue::from_integer(1).as_raw_word();
+                        self.asm.sub_reg_imm32(Register::Rax, encoded_one as i32);
+                        Ok(())
+                    } else {
+                        Err(CompilerError::InvalidArguments(
+                            "sub1 expects 1 argument. Needs a pair".to_string(),
+                        ))
+                    }
+                }
+                "integer->char" => {
+                    if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
+                        self.compile_expr(arg1)?;
+                        self.asm
+                            .shl_reg_imm8(Register::Rax, (K_CHAR_SHIFT - K_INTEGER_SHIFT) as u8)
+                            .or_reg_imm8(Register::Rax, K_CHAR_TAG as u8);
+                        Ok(())
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "integer->char expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+                "nil?" => {
+                    if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
+                        self.compile_expr(arg1)?;
+                        self.asm
+                            .cmp_reg_imm32(Register::Rax, LispValue::nil().as_raw_word() as u32)
+                            .mov_reg_imm32(
+                                Register::Rax,
+                                LispValue::from_integer(0).as_raw_word() as i32,
+                            )
+                            .setcc_imm8(SetccConditions::Equal, PartialRegister::Al)
+                            .shl_reg_imm8(Register::Rax, K_BOOL_SHIFT as u8)
+                            .or_reg_imm8(Register::Rax, K_BOOL_TAG as u8);
+
+                        Ok(())
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "integer->char expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+                // "sub1" => { ... }
+                // "if" => { ... this will be a "special form" ... }
+                // When is a user defined function we need to jump to the pointer
+                _ => return Err(CompilerError::NotAFunction(name.clone())),
+            }
+        } else {
+            // The 'car' was not a symbol, e.g., ((+ 1 2) 3)
+            // This is a higher-order function, which we don't support yet.
+            return Err(CompilerError::NotASymbol);
+        }
+    }
 
     fn compile_expr(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         match node {
@@ -90,65 +183,7 @@ impl Compiler {
                 //     .mov_reg_imm64(Register::Rax, lisp_val.as_raw_word());
             }
 
-            AstNode::Pair { car, cdr } => {
-                // A Pair in evaluation position means a function call.
-                // We must check that the 'car' is a symbol.
-                if let AstNode::Symbol(name) = &**car {
-                    match name.as_str() {
-                        // TODO: This is temporary, we should use a more complex symbol table
-                        "add1" => {
-                            // This is a primitive unary function.
-                            // We expect one argument in the `cdr` list.
-                            if let AstNode::Pair {
-                                car: arg1,
-                                cdr: arg_rest,
-                            } = &**cdr
-                            {
-                                // Check it's (add1 arg1), not (add1 arg1 arg2 ...)
-                                if let AstNode::Nil = **arg_rest {
-                                    // 1. Compile the argument. Result is in RAX.
-                                    self.compile_expr(arg1)?;
-
-                                    // 2. Emit the 'add1' operation. Adding 1 << 2 due to pointer tagging
-                                    let encoded_one = LispValue::from_integer(1).as_raw_word();
-                                    self.asm.add_reg_imm32(Register::Rax, encoded_one as i32);
-                                } else {
-                                    return Err(CompilerError::InvalidArguments(
-                                        "add1 expects 1 argument".to_string(),
-                                    ));
-                                }
-                            } else {
-                                return Err(CompilerError::InvalidArguments(
-                                    "add1 expects 1 argument. Needs a pair".to_string(),
-                                ));
-                            }
-                        }
-                        "integer->char" => {
-                            if let AstNode::Pair { car: arg1, cdr: _ } = &**cdr {
-                                self.compile_expr(arg1)?;
-                                self.asm
-                                    .shl_reg_imm8(
-                                        Register::Rax,
-                                        (K_CHAR_SHIFT - K_INTEGER_SHIFT) as u8,
-                                    )
-                                    .or_reg_imm8(Register::Rax, K_CHAR_TAG as u8);
-                            } else {
-                                return Err(CompilerError::InvalidArguments(
-                                    "integer->char expects 1 argument. Needs a pair".to_string(),
-                                ));
-                            }
-                        }
-                        // "sub1" => { ... }
-                        // "if" => { ... this will be a "special form" ... }
-                        // When is a user defined function we need to jump to the pointer
-                        _ => return Err(CompilerError::NotAFunction(name.clone())),
-                    }
-                } else {
-                    // The 'car' was not a symbol, e.g., ((+ 1 2) 3)
-                    // This is a higher-order function, which we don't support yet.
-                    return Err(CompilerError::NotASymbol);
-                }
-            }
+            AstNode::Pair { car, cdr } => self.compile_call(car, cdr)?,
         }
         Ok(())
     }
@@ -231,6 +266,33 @@ mod tests {
     }
 
     #[test]
+    fn test_sub1() {
+        let mut compiler = Compiler::new();
+
+        // This is the "Lisp way" AST for `(add1 10)`
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("sub1".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(10)),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+
+        let result = compiler.compile_function(&ast_node);
+        assert!(result.is_ok()); // This should pass now
+
+        let code = result.unwrap();
+        let exec = ExecBuffer::new(&code).unwrap();
+
+        let func = unsafe { exec.as_function::<unsafe extern "C" fn() -> i64>() };
+        let encoded_result = unsafe { func() };
+        let lisp_val = LispValue::from_raw_word(encoded_result);
+
+        // The result should be the encoded value for 11
+        assert!(lisp_val.is_integer());
+        assert_eq!(lisp_val.as_integer(), Some(9));
+    }
+    #[test]
     fn test_nested_adds() {
         let mut compiler = Compiler::new();
         let val = 10;
@@ -277,5 +339,19 @@ mod tests {
         let char = lisp_val.as_char();
         // 64 in the asscii table is @
         assert_eq!(char, Some('@'));
+    }
+    #[test]
+    fn test_is_nill() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("nil?".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Nil),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        let bool = lisp_val.as_bool();
+        assert!(bool.is_some());
+        assert_eq!(bool.unwrap(), true);
     }
 }

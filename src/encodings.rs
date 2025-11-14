@@ -1,13 +1,38 @@
 pub type Word = i64;
 pub type UWord = u64;
 
+// POINTER TAGGING SCHEMA
+// High                                                         Low
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX00  Integer
+// 0000000000000000000000000000000000000000000000000XXXXXXX00001111  Character
+// 00000000000000000000000000000000000000000000000000000000X0011111  Boolean
+// 0000000000000000000000000000000000000000000000000000000000101111  Nil
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX001  Pair
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX010  Vector
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX011  String
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX101  Symbol
+// XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX110  Closure
+
+// struct TagsDict {
+//     tags: Vec<(Word, Word)>,
+// }
+// impl TagsDict {
+//     fn new() -> Self {
+//         TagsDict { tags: Vec::new() }
+//     }
+//     fn add_tag(&mut self, tag: Word, mask: Word) {
+//         self.tags.push((tag, mask));
+//     }
+//     pub fn check_for_overlapping(&self) {}
+// }
+
 pub const K_CHAR_TAG: Word = 0x0f;
 const K_CHAR_MASK: Word = 0xff;
 pub const K_CHAR_SHIFT: u32 = 8;
 
-const K_BOOL_TAG: Word = 0x1f;
+pub const K_BOOL_TAG: Word = 0x1f;
 const K_BOOL_MASK: Word = 0x80;
-const K_BOOL_SHIFT: u32 = 7;
+pub const K_BOOL_SHIFT: u32 = 7;
 
 const K_NIL_VALUE: Word = 0x2f;
 
