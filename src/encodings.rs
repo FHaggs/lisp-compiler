@@ -31,7 +31,7 @@ const K_CHAR_MASK: Word = 0xff;
 pub const K_CHAR_SHIFT: u32 = 8;
 
 pub const K_BOOL_TAG: Word = 0x1f;
-const K_BOOL_MASK: Word = 0x80;
+pub const K_BOOL_MASK: Word = 0x80;
 pub const K_BOOL_SHIFT: u32 = 7;
 
 const K_NIL_VALUE: Word = 0x2f;
@@ -39,8 +39,8 @@ const K_NIL_VALUE: Word = 0x2f;
 const K_INTEGER_MAX: Word = (1_i64 << (62 - 1)) - 1;
 const K_INTEGER_MIN: Word = -(1_i64 << (62 - 1));
 pub const K_INTEGER_SHIFT: u32 = 2;
-const K_INTEGER_MASK: Word = 0x03;
-const K_INTEGER_TAG: Word = 0x00;
+pub const K_INTEGER_MASK: Word = 0x03;
+pub const K_INTEGER_TAG: Word = 0x00;
 
 // Pairs
 const K_PAIR_TAG: Word = 0x1;

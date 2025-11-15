@@ -1,7 +1,8 @@
 use crate::assembler::{Assembler, PartialRegister, Register, SetccConditions};
 use crate::ast::AstNode;
 use crate::encodings::{
-    K_BOOL_SHIFT, K_BOOL_TAG, K_CHAR_SHIFT, K_CHAR_TAG, K_INTEGER_SHIFT, LispValue, Pair, Symbol,
+    K_BOOL_MASK, K_BOOL_SHIFT, K_BOOL_TAG, K_CHAR_SHIFT, K_CHAR_TAG, K_INTEGER_MASK,
+    K_INTEGER_SHIFT, K_INTEGER_TAG, LispValue, Pair, Symbol,
 };
 use std::collections::HashMap;
 
@@ -125,26 +126,53 @@ impl Compiler {
                 "nil?" => {
                     if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
                         self.compile_expr(arg1)?;
-                        self.asm
-                            .cmp_reg_imm32(Register::Rax, LispValue::nil().as_raw_word() as u32)
-                            .mov_reg_imm32(
-                                Register::Rax,
-                                LispValue::from_integer(0).as_raw_word() as i32,
-                            )
-                            .setcc_imm8(SetccConditions::Equal, PartialRegister::Al)
-                            .shl_reg_imm8(Register::Rax, K_BOOL_SHIFT as u8)
-                            .or_reg_imm8(Register::Rax, K_BOOL_TAG as u8);
-
+                        self.compile_compare_imm32(LispValue::nil());
                         Ok(())
                     } else {
                         return Err(CompilerError::InvalidArguments(
-                            "integer->char expects 1 argument. Needs a pair".to_string(),
+                            "nil? expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+                "zero?" => {
+                    if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
+                        self.compile_expr(arg1)?;
+                        self.compile_compare_imm32(LispValue::from_integer(0));
+                        Ok(())
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "zero? expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+
+                "integer?" => {
+                    if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
+                        self.compile_expr(arg1)?;
+                        self.asm.and_reg_imm8(Register::Rax, K_INTEGER_MASK as u8);
+                        self.compile_compare_imm32(LispValue::from_raw_word(K_INTEGER_TAG));
+                        Ok(())
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "integer? expects 1 argument. Needs a pair".to_string(),
+                        ));
+                    }
+                }
+                "bool?" => {
+                    // TODO: Add test to this func
+                    if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
+                        self.compile_expr(arg1)?;
+                        self.asm.and_reg_imm8(Register::Rax, K_BOOL_MASK as u8);
+                        self.compile_compare_imm32(LispValue::from_raw_word(K_BOOL_TAG));
+                        Ok(())
+                    } else {
+                        return Err(CompilerError::InvalidArguments(
+                            "integer? expects 1 argument. Needs a pair".to_string(),
                         ));
                     }
                 }
                 // "sub1" => { ... }
                 // "if" => { ... this will be a "special form" ... }
-                // When is a user defined function we need to jump to the pointer
                 _ => return Err(CompilerError::NotAFunction(name.clone())),
             }
         } else {
@@ -152,6 +180,14 @@ impl Compiler {
             // This is a higher-order function, which we don't support yet.
             return Err(CompilerError::NotASymbol);
         }
+    }
+    fn compile_compare_imm32(&mut self, value: LispValue) {
+        self.asm
+            .cmp_reg_imm32(Register::Rax, value.as_raw_word() as u32)
+            .mov_reg_imm32(Register::Rax, 0)
+            .setcc_imm8(SetccConditions::Equal, PartialRegister::Al)
+            .shl_reg_imm8(Register::Rax, K_BOOL_SHIFT as u8)
+            .or_reg_imm8(Register::Rax, K_BOOL_TAG as u8);
     }
 
     fn compile_expr(&mut self, node: &AstNode) -> Result<(), CompilerError> {
@@ -353,5 +389,52 @@ mod tests {
         let bool = lisp_val.as_bool();
         assert!(bool.is_some());
         assert_eq!(bool.unwrap(), true);
+    }
+
+    #[test]
+    fn test_is_zero() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("zero?".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(0)),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        let bool = lisp_val.as_bool();
+        assert!(bool.is_some());
+        assert_eq!(bool.unwrap(), true);
+    }
+
+    #[test]
+    fn test_is_int() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("integer?".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(19283)),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        let bool = lisp_val.as_bool();
+        assert!(bool.is_some());
+        assert_eq!(bool.unwrap(), true);
+    }
+    #[test]
+    fn test_not_integer() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("integer?".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Char('a')),
+                cdr: Box::new(AstNode::Nil),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        for b in lisp_val.as_raw_word().to_ne_bytes() {
+            print!("{:02X} ", b);
+        }
+        let bool = lisp_val.as_bool();
+        assert!(bool.is_some());
+        assert_eq!(bool.unwrap(), false);
     }
 }
