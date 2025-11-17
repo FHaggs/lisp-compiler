@@ -56,9 +56,9 @@ impl Compiler {
 
     /// Consumes the compiler and returns the compiled machine code.
     pub fn compile_function(
-        &mut self, // Takes ownership of self TODO Add this
+        mut self, // Takes ownership of self TODO Add this
         ast_node: &AstNode,
-    ) -> Result<&Vec<u8>, CompilerError> {
+    ) -> Result<Vec<u8>, CompilerError> {
         self.compile_expr(ast_node)?;
         self.asm.ret();
         Ok(self.asm.finalize())

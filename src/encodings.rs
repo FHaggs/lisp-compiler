@@ -195,4 +195,23 @@ impl LispValue {
             None
         }
     }
+
+    // Debug and print the rust value by checking all tags
+    pub fn print(&self) {
+        if self.is_bool() {
+            println!("Bool: {}", self.as_bool().unwrap());
+        } else if self.is_integer() {
+            println!("Integer: {}", self.as_integer().unwrap());
+        } else if self.is_char() {
+            println!("Char: {}", self.as_char().unwrap());
+        } else if self.is_nil() {
+            println!("Nil");
+        } else if self.is_symbol() {
+            println!("Symbol: TODO!");
+        } else if self.is_pair() {
+            println!("Pair: {:?}", self.as_pair_pointer().unwrap());
+        } else {
+            println!("Unknown");
+        }
+    }
 }

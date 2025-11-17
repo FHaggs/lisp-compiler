@@ -47,8 +47,8 @@ impl Assembler {
     }
 
     /// Consumes the assembler and returns the raw machine code bytes. IT SHOULD< FOR NOW USE JUST A REF
-    pub fn finalize(&self) -> &Vec<u8> {
-        &self.code
+    pub fn finalize(self) -> Vec<u8> {
+        self.code
     }
 
     /// Emits a 64-bit "move register, immediate" instruction.
