@@ -34,6 +34,8 @@ pub enum SetccConditions {
     Below = 2,        // B, C, NAE
     AboveOrEqual = 3, // AE, NB, NC
     Equal = 4,        // E, Z
+    Less = 12,        // L, NGE
+    Greater = 15,     // G, NLE
 }
 
 const REX_W_PREFIX: u8 = 0x48;
@@ -61,6 +63,14 @@ impl Assembler {
 
         self // Return `&mut Self` to allow chaining
     }
+
+    pub fn mov_reg_reg(&mut self, dst: Register, src: Register) -> &mut Self {
+        self.code.push(REX_W_PREFIX);
+        self.code.push(0x89);
+        self.code.push(0xc0 + ((src as u8) << 3) + dst as u8);
+        self
+    }
+
     pub fn add_reg_imm32(&mut self, dst: Register, src: i32) -> &mut Self {
         self.code.push(REX_W_PREFIX);
         self.code.push(0x81); // Opcode for immediate arithmetic
@@ -68,6 +78,14 @@ impl Assembler {
         self.code.extend_from_slice(&(src as u32).to_le_bytes());
         self
     }
+
+    pub fn add_reg_reg(&mut self, dst: Register, src: Register) -> &mut Self {
+        self.code.push(REX_W_PREFIX);
+        self.code.push(0x01);
+        self.code.push(0xc0 + ((src as u8) << 3) + dst as u8);
+        self
+    }
+
     pub fn sub_reg_imm32(&mut self, dst: Register, src: i32) -> &mut Self {
         self.code.push(REX_W_PREFIX);
         self.code.push(0x81); // Opcode for immediate arithmetic
@@ -75,6 +93,31 @@ impl Assembler {
         self.code.extend_from_slice(&(src as u32).to_le_bytes());
         self
     }
+
+    pub fn sub_reg_reg(&mut self, dst: Register, src: Register) -> &mut Self {
+        self.code.push(REX_W_PREFIX);
+        self.code.push(0x29);
+        self.code.push(0xc0 + ((src as u8) << 3) + dst as u8);
+        self
+    }
+
+    pub fn cmp_reg_reg(&mut self, dst: Register, src: Register) -> &mut Self {
+        self.code.push(REX_W_PREFIX);
+        self.code.push(0x39);
+        self.code.push(0xc0 + ((src as u8) << 3) + dst as u8);
+        self
+    }
+
+    pub fn push_reg(&mut self, reg: Register) -> &mut Self {
+        self.code.push(0x50 + reg as u8);
+        self
+    }
+
+    pub fn pop_reg(&mut self, reg: Register) -> &mut Self {
+        self.code.push(0x58 + reg as u8);
+        self
+    }
+
     pub fn shl_reg_imm8(&mut self, dst: Register, imm8: u8) -> &mut Self {
         self.code.push(REX_W_PREFIX); // 0x48
         self.code.push(0xC1); // Opcode for SHL r/m64, imm8

@@ -59,7 +59,10 @@ impl Compiler {
         mut self, // Takes ownership of self TODO Add this
         ast_node: &AstNode,
     ) -> Result<Vec<u8>, CompilerError> {
+        self.asm.push_reg(Register::Rbp);
+        self.asm.mov_reg_reg(Register::Rbp, Register::Rsp);
         self.compile_expr(ast_node)?;
+        self.asm.pop_reg(Register::Rbp);
         self.asm.ret();
         Ok(self.asm.finalize())
     }
@@ -97,6 +100,9 @@ impl Compiler {
                         ));
                     }
                 }
+                "+" => self.compile_binary_arithmetic(cdr, |asm| {
+                    asm.add_reg_reg(Register::Rax, Register::Rcx);
+                }),
                 "sub1" => {
                     if let AstNode::Pair { car: arg, cdr: _ } = cdr {
                         self.compile_expr(arg)?;
@@ -110,6 +116,12 @@ impl Compiler {
                         ))
                     }
                 }
+                "-" => self.compile_binary_arithmetic(cdr, |asm| {
+                    asm.sub_reg_reg(Register::Rcx, Register::Rax)
+                        .mov_reg_reg(Register::Rax, Register::Rcx);
+                }),
+                "<" => self.compile_binary_compare(cdr, SetccConditions::Less),
+                ">" => self.compile_binary_compare(cdr, SetccConditions::Greater),
                 "integer->char" => {
                     if let AstNode::Pair { car: arg1, cdr: _ } = cdr {
                         self.compile_expr(arg1)?;
@@ -188,6 +200,75 @@ impl Compiler {
             .setcc_imm8(SetccConditions::Equal, PartialRegister::Al)
             .shl_reg_imm8(Register::Rax, K_BOOL_SHIFT as u8)
             .or_reg_imm8(Register::Rax, K_BOOL_TAG as u8);
+    }
+
+    fn compile_binary_arithmetic<F>(&mut self, cdr: &AstNode, emit_op: F) -> Result<(), CompilerError>
+    where
+        F: FnOnce(&mut Assembler),
+    {
+        let (arg1, arg2) = self.expect_two_args(cdr, "binary arithmetic")?;
+        self.compile_expr(arg1)?;
+        self.asm.push_reg(Register::Rax);
+        self.compile_expr(arg2)?;
+        self.asm.pop_reg(Register::Rcx);
+        emit_op(&mut self.asm);
+        Ok(())
+    }
+
+    fn compile_binary_compare(
+        &mut self,
+        cdr: &AstNode,
+        condition: SetccConditions,
+    ) -> Result<(), CompilerError> {
+        let (arg1, arg2) = self.expect_two_args(cdr, "binary comparison")?;
+        self.compile_expr(arg1)?;
+        self.asm.push_reg(Register::Rax);
+        self.compile_expr(arg2)?;
+        self.asm.pop_reg(Register::Rcx);
+        self.asm
+            .cmp_reg_reg(Register::Rcx, Register::Rax)
+            .mov_reg_imm32(Register::Rax, 0)
+            .setcc_imm8(condition, PartialRegister::Al)
+            .shl_reg_imm8(Register::Rax, K_BOOL_SHIFT as u8)
+            .or_reg_imm8(Register::Rax, K_BOOL_TAG as u8);
+        Ok(())
+    }
+
+    fn expect_two_args<'a>(
+        &self,
+        cdr: &'a AstNode,
+        function_name: &str,
+    ) -> Result<(&'a AstNode, &'a AstNode), CompilerError> {
+        if let AstNode::Pair {
+            car: arg1,
+            cdr: arg_rest,
+        } = cdr
+        {
+            if let AstNode::Pair {
+                car: arg2,
+                cdr: tail,
+            } = &**arg_rest
+            {
+                if let AstNode::Nil = &**tail {
+                    Ok((arg1, arg2))
+                } else {
+                    Err(CompilerError::InvalidArguments(format!(
+                        "{} expects 2 arguments",
+                        function_name
+                    )))
+                }
+            } else {
+                Err(CompilerError::InvalidArguments(format!(
+                    "{} expects 2 arguments",
+                    function_name
+                )))
+            }
+        } else {
+            Err(CompilerError::InvalidArguments(format!(
+                "{} expects 2 arguments. Needs a pair",
+                function_name
+            )))
+        }
     }
 
     fn compile_expr(&mut self, node: &AstNode) -> Result<(), CompilerError> {
@@ -436,5 +517,69 @@ mod tests {
         let bool = lisp_val.as_bool();
         assert!(bool.is_some());
         assert_eq!(bool.unwrap(), false);
+    }
+
+    #[test]
+    fn test_add_binary() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("+".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(10)),
+                cdr: Box::new(AstNode::Pair {
+                    car: Box::new(AstNode::Integer(7)),
+                    cdr: Box::new(AstNode::Nil),
+                }),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        assert_eq!(lisp_val.as_integer(), Some(17));
+    }
+
+    #[test]
+    fn test_sub_binary() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("-".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(10)),
+                cdr: Box::new(AstNode::Pair {
+                    car: Box::new(AstNode::Integer(3)),
+                    cdr: Box::new(AstNode::Nil),
+                }),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        assert_eq!(lisp_val.as_integer(), Some(7));
+    }
+
+    #[test]
+    fn test_less_binary() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol("<".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(3)),
+                cdr: Box::new(AstNode::Pair {
+                    car: Box::new(AstNode::Integer(7)),
+                    cdr: Box::new(AstNode::Nil),
+                }),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        assert_eq!(lisp_val.as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_greater_binary() {
+        let ast_node = AstNode::Pair {
+            car: Box::new(AstNode::Symbol(">".to_string())),
+            cdr: Box::new(AstNode::Pair {
+                car: Box::new(AstNode::Integer(7)),
+                cdr: Box::new(AstNode::Pair {
+                    car: Box::new(AstNode::Integer(3)),
+                    cdr: Box::new(AstNode::Nil),
+                }),
+            }),
+        };
+        let lisp_val = compile_ast(ast_node);
+        assert_eq!(lisp_val.as_bool(), Some(true));
     }
 }
